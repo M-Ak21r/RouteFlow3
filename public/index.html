@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RouteFlow — Last Mile Delivery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<section class="auth-screen" id="auth-screen" aria-label="Authentication">
+  <div class="auth-card-shell">
+    <div class="auth-brand">RouteFlow Access</div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-action="switch-auth-mode" data-mode="login" type="button">Login</button>
+      <button class="auth-tab" data-action="switch-auth-mode" data-mode="signup" type="button">Sign Up</button>
+    </div>
+
+    <form id="form-login" class="auth-form active" autocomplete="on">
+      <label class="auth-label" for="login-email">Email</label>
+      <input class="auth-input" id="login-email" type="email" placeholder="you@example.com" required>
+      <label class="auth-label" for="login-password">Password</label>
+      <input class="auth-input" id="login-password" type="password" placeholder="Enter password" required>
+      <button class="btn-primary auth-submit" data-action="submit-login" type="submit">Login</button>
+      <div class="auth-inline-text">New here? <button data-action="switch-auth-mode" data-mode="signup" type="button">Create account</button></div>
+    </form>
+
+    <form id="form-signup" class="auth-form" autocomplete="on">
+      <label class="auth-label" for="signup-name">Name</label>
+      <input class="auth-input" id="signup-name" type="text" placeholder="Your full name" required>
+      <label class="auth-label" for="signup-email">Email</label>
+      <input class="auth-input" id="signup-email" type="email" placeholder="you@example.com" required>
+      <label class="auth-label" for="signup-password">Password</label>
+      <input class="auth-input" id="signup-password" type="password" placeholder="Choose a password" required>
+      <button class="btn-primary auth-submit" data-action="submit-signup" type="submit">Create Account</button>
+      <div class="auth-inline-text">Already have an account? <button data-action="switch-auth-mode" data-mode="login" type="button">Login</button></div>
+    </form>
+  </div>
+</section>
+
+<header id="app-header">
+  <div class="logo">
+    <div class="logo-dot">
+      <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 2L14 5.5V10.5L8 14L2 10.5V5.5L8 2Z" fill="#000" stroke="#000" stroke-width="0.5"/>
+        <circle cx="8" cy="8" r="2" fill="#00e5a0"/>
+      </svg>
+    </div>
+    Route<span>Flow</span>
+  </div>
+
+  <div class="header-center">
+    <button class="tab-btn active" data-action="switch-view" data-view="map">🗺 Live Map</button>
+    <button class="tab-btn" data-action="switch-view" data-view="customers">👥 Customers</button>
+    <button class="tab-btn" data-action="switch-view" data-view="analytics">📊 Analytics</button>
+  </div>
+
+  <div class="header-right">
+    <div class="status-pill"><div class="pulse-dot"></div>LIVE · 3 Routes Active</div>
+    <button class="btn-secondary header-logout" data-action="logout" type="button">Logout</button>
+    <div class="avatar" title="Dispatcher">DP</div>
+  </div>
+</header>
+
+<div class="app-body">
+
+  <!-- ═══════════ MAP VIEW ═══════════ -->
+  <div class="view-panel active map-view-panel" id="view-map">
+
+    <!-- Left sidebar: deliveries list -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">
+          Deliveries
+          <span class="badge" id="delivery-count">0</span>
+        </div>
+        <div class="search-box">
+          <svg class="search-icon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" placeholder="Search deliveries…" id="search-input" data-action="filter-deliveries">
+        </div>
+      </div>
+      <div class="sidebar-scroll" id="delivery-list"></div>
+      <div class="sidebar-footer">
+        <button class="btn-primary sidebar-action" data-action="open-add-delivery">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Add Delivery
+        </button>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div class="map-area">
+      <div class="loading-overlay" id="map-loader">
+        <div class="spinner"></div>
+        <div class="loading-text">Initialising route engine…</div>
+      </div>
+
+      <div id="map"></div>
+
+      <div class="map-stats-bar">
+        <div class="stat-chip">
+          <div class="s-label">Total Stops</div>
+          <div class="s-val" id="stat-stops">0</div>
+        </div>
+        <div class="stat-chip">
+          <div class="s-label">Est. Distance</div>
+          <div class="s-val blue" id="stat-dist">— km</div>
+        </div>
+        <div class="stat-chip">
+          <div class="s-label">Delivered</div>
+          <div class="s-val green" id="stat-done">0</div>
+        </div>
+        <div class="stat-chip">
+          <div class="s-label">Pending</div>
+          <div class="s-val orange" id="stat-pending">0</div>
+        </div>
+      </div>
+
+      <div class="optimize-btn">
+        <button class="btn-primary" data-action="optimize-route">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Optimise Route
+        </button>
+        <button class="btn-secondary" data-action="reset-route">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Reset
+        </button>
+      </div>
+
+      <div class="map-controls">
+        <button class="map-btn" title="Zoom In" data-action="map-zoom" data-dir="1">+</button>
+        <button class="map-btn" title="Zoom Out" data-action="map-zoom" data-dir="-1">−</button>
+        <button class="map-btn" title="Center" data-action="center-map">⌖</button>
+      </div>
+    </div>
+
+    <!-- Right panel: route + vehicles -->
+    <div class="right-panel">
+      <div class="panel-section">
+        <div class="panel-section-title">Optimised Stops</div>
+        <div id="route-stops-list" class="route-stops route-stops-compact"></div>
+      </div>
+
+      <div class="panel-section panel-section-fill">
+        <div class="panel-section-title">Vehicles</div>
+        <div class="vehicle-list" id="vehicle-list"></div>
+      </div>
+    </div>
+
+  </div><!-- /map view -->
+
+  <!-- ═══════════ CUSTOMERS VIEW ═══════════ -->
+  <div class="view-panel" id="view-customers">
+    <div class="customers-view">
+      <div class="view-header">
+        <div class="view-title">Customer Management</div>
+        <div class="toolbar">
+          <div class="search-box">
+            <svg class="search-icon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" id="cust-search" placeholder="Search customers…" data-action="filter-customers" class="search-input-compact">
+          </div>
+          <button class="btn-primary" data-action="open-add-customer">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            New Customer
+          </button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Address</th>
+              <th>Zone</th>
+              <th>Priority</th>
+              <th>Orders</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="customer-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ ANALYTICS VIEW ═══════════ -->
+  <div class="view-panel" id="view-analytics">
+    <div class="analytics-view">
+      <div class="view-title analytics-title">Performance Analytics</div>
+      <div class="metrics-grid">
+        <div class="metric-card c1">
+          <div class="metric-label">Deliveries Today</div>
+          <div class="metric-value metric-value-accent">47</div>
+          <div class="metric-sub">↑ 12% vs yesterday</div>
+        </div>
+        <div class="metric-card c2">
+          <div class="metric-label">Avg Route Time</div>
+          <div class="metric-value metric-value-soft">2.4h</div>
+          <div class="metric-sub">↓ 8% optimised</div>
+        </div>
+        <div class="metric-card c3">
+          <div class="metric-label">Fuel Efficiency</div>
+          <div class="metric-value metric-value-highlight">82%</div>
+          <div class="metric-sub">↑ 5% this week</div>
+        </div>
+        <div class="metric-card c4">
+          <div class="metric-label">On-time Rate</div>
+          <div class="metric-value metric-value-warn">94%</div>
+          <div class="metric-sub">Target: 95%</div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">Weekly Deliveries</div>
+          <div class="bar-chart" id="weekly-chart"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Delivery Status Breakdown</div>
+          <div class="donut-wrap">
+            <svg class="donut" width="110" height="110" viewBox="0 0 110 110">
+              <circle cx="55" cy="55" r="40" fill="none" stroke="#1e2535" stroke-width="18"/>
+              <circle cx="55" cy="55" r="40" fill="none" stroke="var(--accent)" stroke-width="18" stroke-dasharray="150 251" stroke-dashoffset="-10" stroke-linecap="round"/>
+              <circle cx="55" cy="55" r="40" fill="none" stroke="var(--accent2)" stroke-width="18" stroke-dasharray="60 251" stroke-dashoffset="-165" stroke-linecap="round"/>
+              <circle cx="55" cy="55" r="40" fill="none" stroke="var(--warning)" stroke-width="18" stroke-dasharray="25 251" stroke-dashoffset="-228" stroke-linecap="round"/>
+              <circle cx="55" cy="55" r="40" fill="none" stroke="var(--danger)" stroke-width="18" stroke-dasharray="16 251" stroke-dashoffset="-256" stroke-linecap="round"/>
+              <text x="55" y="51" text-anchor="middle" fill="var(--text)" font-size="16" font-weight="700" font-family="Syne,sans-serif">94</text>
+              <text x="55" y="64" text-anchor="middle" fill="var(--text3)" font-size="9" font-family="DM Mono,monospace">TOTAL</text>
+            </svg>
+            <div class="donut-legend">
+              <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Delivered (60%)</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>In Transit (24%)</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--warning)"></div>Pending (10%)</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--danger)"></div>Failed (6%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-card activity-card">
+        <div class="chart-title">Recent Activity Log</div>
+        <table class="activity-table">
+          <thead>
+            <tr class="activity-table-head">
+              <th>TIME</th>
+              <th>EVENT</th>
+              <th>DRIVER</th>
+              <th>STATUS</th>
+            </tr>
+          </thead>
+          <tbody id="activity-log"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /app-body -->
+
+<!-- ═══ ADD DELIVERY MODAL ═══ -->
+<div class="modal-overlay" id="modal-delivery">
+  <div class="modal">
+    <div class="modal-title">
+      New Delivery
+      <button class="modal-close" data-action="close-modal" data-modal="modal-delivery">×</button>
+    </div>
+    <div class="form-grid">
+      <div class="field form-full">
+        <label>Customer Name</label>
+        <input type="text" id="d-name" placeholder="Enter full name">
+      </div>
+      <div class="field form-full">
+        <label>Delivery Address</label>
+        <input type="text" id="d-addr" placeholder="Start typing full address, area, or pincode">
+        <div class="address-meta" id="d-addr-meta">Suggestions include full address and postcode.</div>
+        <div class="address-suggestions hidden" id="d-addr-suggestions" role="listbox" aria-label="Address suggestions"></div>
+      </div>
+      <div class="field">
+        <label>Latitude (Auto)</label>
+        <input type="number" id="d-lat" placeholder="Auto-filled from selected address" step="0.0001" readonly>
+      </div>
+      <div class="field">
+        <label>Longitude (Auto)</label>
+        <input type="number" id="d-lng" placeholder="Auto-filled from selected address" step="0.0001" readonly>
+      </div>
+      <div class="field">
+        <label>Priority</label>
+        <select id="d-priority">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Package Type</label>
+        <select id="d-type">
+          <option>Standard</option>
+          <option>Fragile</option>
+          <option>Perishable</option>
+          <option>Heavy</option>
+        </select>
+      </div>
+      <div class="field form-full">
+        <label>Notes</label>
+        <textarea id="d-notes" rows="2" placeholder="Special instructions…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" data-action="close-modal" data-modal="modal-delivery">Cancel</button>
+      <button class="btn-primary" data-action="add-delivery">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+        Add Delivery
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ADD CUSTOMER MODAL ═══ -->
+<div class="modal-overlay" id="modal-customer">
+  <div class="modal">
+    <div class="modal-title">
+      New Customer
+      <button class="modal-close" data-action="close-modal" data-modal="modal-customer">×</button>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label>First Name</label>
+        <input type="text" id="c-fname" placeholder="First name">
+      </div>
+      <div class="field">
+        <label>Last Name</label>
+        <input type="text" id="c-lname" placeholder="Last name">
+      </div>
+      <div class="field form-full">
+        <label>Address</label>
+        <input type="text" id="c-addr" placeholder="Full delivery address">
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <input type="tel" id="c-phone" placeholder="+91 XXXXX XXXXX">
+      </div>
+      <div class="field">
+        <label>Zone</label>
+        <select id="c-zone">
+          <option>Zone A — North</option>
+          <option>Zone B — South</option>
+          <option>Zone C — East</option>
+          <option>Zone D — West</option>
+          <option>Zone E — Central</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Priority</label>
+        <select id="c-priority">
+          <option value="low">Standard</option>
+          <option value="medium">Premium</option>
+          <option value="high">VIP</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="c-email" placeholder="customer@email.com">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" data-action="close-modal" data-modal="modal-customer">Cancel</button>
+      <button class="btn-primary" data-action="add-customer">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+        Save Customer
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
+
