@@ -4,6 +4,7 @@ const router = express.Router();
 const Delivery = require('../models/delivery');
 const Vehicle = require('../models/vehicle');
 const Customer = require('../models/Customer');
+const DeliveryEvent = require('../models/DeliveryEvent');
 
 function statusCounts(deliveries) {
   return deliveries.reduce(
@@ -205,6 +206,33 @@ router.get('/hourly-distribution', async (req, res, next) => {
       .map(([hour, count]) => ({ hour, count }));
 
     res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/analytics/events — latest 10 audit-trail entries
+router.get('/events', async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 10, 50);
+
+    const events = await DeliveryEvent.find()
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json(
+      events.map((event) => ({
+        _id: event._id,
+        eventType: event.eventType || event.event_type || 'SYSTEM',
+        timestamp: event.timestamp || event.created_at,
+        userId: event.userId || null,
+        driverId: event.driverId || null,
+        details: event.details || {},
+        message: event.message || '',
+        delivery_id: event.delivery_id || null,
+      }))
+    );
   } catch (err) {
     next(err);
   }

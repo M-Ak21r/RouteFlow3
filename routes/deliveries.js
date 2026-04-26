@@ -574,12 +574,28 @@ router.post('/', async (req, res, next) => {
 
     await DeliveryEvent.create({
       delivery_id: delivery._id,
+      eventType: 'NEW_DELIVERY',
       event_type: 'created',
-      message: `Delivery ${delivery.orderId || delivery._id.toString()} created`
+      message: `Delivery ${delivery.orderId || delivery._id.toString()} created`,
+      userId: req.user?.id || null,
+      details: { orderId: delivery.orderId, address: delivery.address, priority: delivery.priority },
+      timestamp: new Date(),
     });
 
     if (req.io) {
+      const eventDoc = await DeliveryEvent.findOne({ delivery_id: delivery._id, eventType: 'NEW_DELIVERY' }).lean();
       req.io.emit('delivery:created', normalizeDelivery(delivery.toObject()));
+      // Broadcast new audit event for the Activity Log
+      if (eventDoc) {
+        req.io.emit('analytics:newEvent', {
+          _id: eventDoc._id,
+          eventType: eventDoc.eventType,
+          timestamp: eventDoc.timestamp,
+          message: eventDoc.message,
+          details: eventDoc.details,
+          driverId: eventDoc.driverId || null,
+        });
+      }
       if (delivery.vehicleId) {
         const syncedVehicle = await syncVehicleStatus(delivery.vehicleId);
         if (syncedVehicle) {
@@ -616,8 +632,12 @@ router.patch('/:id/status', async (req, res, next) => {
 
     await DeliveryEvent.create({
       delivery_id: delivery._id,
+      eventType: 'STATUS_CHANGE',
       event_type: 'status_changed',
-      message: `Delivery marked as ${normalizedStatus}`,
+      message: `Delivery ${delivery.orderId || delivery._id.toString()} marked as ${normalizedStatus}`,
+      userId: req.user?.id || null,
+      details: { orderId: delivery.orderId, status: normalizedStatus, previousStatus: delivery.status },
+      timestamp: new Date(),
     });
 
     let syncedVehicle = null;
@@ -626,7 +646,25 @@ router.patch('/:id/status', async (req, res, next) => {
     }
 
     if (req.io) {
+      const eventDoc = await DeliveryEvent.findOne({ delivery_id: delivery._id, eventType: 'STATUS_CHANGE' })
+        .sort({ timestamp: -1 })
+        .lean();
+
       req.io.emit('delivery:statusChanged', { id: delivery._id.toString(), status: normalizedStatus, delivery: normalizeDelivery(delivery) });
+      req.io.emit('DELIVERY_UPDATED', { id: delivery._id.toString(), status: normalizedStatus });
+
+      // Broadcast new audit event for the Activity Log
+      if (eventDoc) {
+        req.io.emit('analytics:newEvent', {
+          _id: eventDoc._id,
+          eventType: eventDoc.eventType,
+          timestamp: eventDoc.timestamp,
+          message: eventDoc.message,
+          details: eventDoc.details,
+          driverId: eventDoc.driverId || null,
+        });
+      }
+
       if (syncedVehicle) {
         req.io.emit('vehicle:statusChanged', { id: syncedVehicle.id, status: syncedVehicle.status, vehicle: syncedVehicle });
       }

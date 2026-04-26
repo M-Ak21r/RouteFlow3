@@ -197,22 +197,22 @@
       <div class="metrics-grid">
         <div class="metric-card c1">
           <div class="metric-label">Deliveries Today</div>
-          <div class="metric-value metric-value-accent">47</div>
-          <div class="metric-sub">↑ 12% vs yesterday</div>
+          <div class="metric-value metric-value-accent" id="kpi-deliveries-today">—</div>
+          <div class="metric-sub" id="kpi-deliveries-sub">Loading…</div>
         </div>
         <div class="metric-card c2">
-          <div class="metric-label">Avg Route Time</div>
-          <div class="metric-value metric-value-soft">2.4h</div>
-          <div class="metric-sub">↓ 8% optimised</div>
+          <div class="metric-label">Total Distance Driven</div>
+          <div class="metric-value metric-value-soft" id="kpi-total-distance">—</div>
+          <div class="metric-sub" id="kpi-distance-sub">km today</div>
         </div>
         <div class="metric-card c3">
-          <div class="metric-label">Fuel Efficiency</div>
-          <div class="metric-value metric-value-highlight">82%</div>
-          <div class="metric-sub">↑ 5% this week</div>
+          <div class="metric-label">Active Fleet</div>
+          <div class="metric-value metric-value-highlight" id="kpi-active-fleet">—</div>
+          <div class="metric-sub" id="kpi-fleet-sub">vehicles active</div>
         </div>
         <div class="metric-card c4">
           <div class="metric-label">On-time Rate</div>
-          <div class="metric-value metric-value-warn">94%</div>
+          <div class="metric-value metric-value-warn" id="kpi-ontime-rate">—</div>
           <div class="metric-sub">Target: 95%</div>
         </div>
       </div>
@@ -227,18 +227,18 @@
           <div class="donut-wrap">
             <svg class="donut" width="110" height="110" viewBox="0 0 110 110">
               <circle cx="55" cy="55" r="40" fill="none" stroke="#1e2535" stroke-width="18"/>
-              <circle cx="55" cy="55" r="40" fill="none" stroke="var(--accent)" stroke-width="18" stroke-dasharray="150 251" stroke-dashoffset="-10" stroke-linecap="round"/>
-              <circle cx="55" cy="55" r="40" fill="none" stroke="var(--accent2)" stroke-width="18" stroke-dasharray="60 251" stroke-dashoffset="-165" stroke-linecap="round"/>
-              <circle cx="55" cy="55" r="40" fill="none" stroke="var(--warning)" stroke-width="18" stroke-dasharray="25 251" stroke-dashoffset="-228" stroke-linecap="round"/>
-              <circle cx="55" cy="55" r="40" fill="none" stroke="var(--danger)" stroke-width="18" stroke-dasharray="16 251" stroke-dashoffset="-256" stroke-linecap="round"/>
-              <text x="55" y="51" text-anchor="middle" fill="var(--text)" font-size="16" font-weight="700" font-family="Syne,sans-serif">94</text>
+              <circle id="donut-delivered" cx="55" cy="55" r="40" fill="none" stroke="var(--accent)" stroke-width="18" stroke-dasharray="0 251" stroke-dashoffset="-10" stroke-linecap="round"/>
+              <circle id="donut-transit" cx="55" cy="55" r="40" fill="none" stroke="var(--accent2)" stroke-width="18" stroke-dasharray="0 251" stroke-dashoffset="-10" stroke-linecap="round"/>
+              <circle id="donut-pending" cx="55" cy="55" r="40" fill="none" stroke="var(--warning)" stroke-width="18" stroke-dasharray="0 251" stroke-dashoffset="-10" stroke-linecap="round"/>
+              <circle id="donut-failed" cx="55" cy="55" r="40" fill="none" stroke="var(--danger)" stroke-width="18" stroke-dasharray="0 251" stroke-dashoffset="-10" stroke-linecap="round"/>
+              <text id="donut-total" x="55" y="51" text-anchor="middle" fill="var(--text)" font-size="16" font-weight="700" font-family="Syne,sans-serif">—</text>
               <text x="55" y="64" text-anchor="middle" fill="var(--text3)" font-size="9" font-family="DM Mono,monospace">TOTAL</text>
             </svg>
             <div class="donut-legend">
-              <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Delivered (60%)</div>
-              <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>In Transit (24%)</div>
-              <div class="legend-item"><div class="legend-dot" style="background:var(--warning)"></div>Pending (10%)</div>
-              <div class="legend-item"><div class="legend-dot" style="background:var(--danger)"></div>Failed (6%)</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Delivered (<span id="legend-delivered">—</span>%)</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>In Transit (<span id="legend-transit">—</span>%)</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--warning)"></div>Pending (<span id="legend-pending">—</span>%)</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--danger)"></div>Failed (<span id="legend-failed">—</span>%)</div>
             </div>
           </div>
         </div>
@@ -381,6 +381,7 @@
 <!-- Toast container -->
 <div class="toast-container" id="toast-container"></div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

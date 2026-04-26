@@ -496,9 +496,11 @@ app.use(
           "https://*.cartocdn.com"
         ],
 
-        // VERY IMPORTANT (fixes leaflet map loading)
+        // VERY IMPORTANT (fixes leaflet map loading + socket.io WebSocket)
         "connect-src": [
           "'self'",
+          "ws:",
+          "wss:",
           "https://unpkg.com",
           "https://*.tile.openstreetmap.org",
           "https://*.basemaps.cartocdn.com",
