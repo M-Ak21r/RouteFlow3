@@ -340,6 +340,7 @@ const router = express.Router();
 
 const Delivery = require('../models/delivery');
 const Vehicle = require('../models/vehicle');
+const DeliveryEvent = require('../models/DeliveryEvent');
 
 const DEPOT = { lat: 28.6304, lng: 77.2177, name: 'Distribution Centre' };
 const OSRM_BASE_URL = 'https://router.project-osrm.org';
@@ -631,6 +632,30 @@ router.post('/optimise', async (req, res) => {
       total_distance_km: totalDistanceKm,
       total_stops: orderedStops.length,
     });
+    req.io.emit('ROUTE_OPTIMIZED', {
+      total_distance_km: totalDistanceKm,
+      total_stops: orderedStops.length,
+    });
+
+    // Log route optimisation as an audit event and broadcast to Activity Log
+    try {
+      const eventDoc = await DeliveryEvent.create({
+        eventType: 'ROUTE_OPTIMIZED',
+        event_type: 'route_optimised',
+        message: `Route optimised — ${orderedStops.length} stops, ${totalDistanceKm} km`,
+        userId: req.user?.id || null,
+        details: { total_stops: orderedStops.length, total_distance_km: totalDistanceKm },
+        timestamp: new Date(),
+      });
+      req.io.emit('analytics:newEvent', {
+        _id: eventDoc._id,
+        eventType: eventDoc.eventType,
+        timestamp: eventDoc.timestamp,
+        message: eventDoc.message,
+        details: eventDoc.details,
+        driverId: null,
+      });
+    } catch (_) {}
 
     res.json({
       message: 'Route optimised successfully',

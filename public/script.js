@@ -115,6 +115,7 @@ function requireSession(message = 'Session expired. Please login again.') {
     clearInterval(deliveriesRefreshInterval);
     deliveriesRefreshInterval = null;
   }
+  disconnectSocket();
   showAuthScreen();
   setAuthMode('login');
   toast(message, 'warning');
@@ -217,6 +218,7 @@ function logout() {
     clearInterval(deliveriesRefreshInterval);
     deliveriesRefreshInterval = null;
   }
+  disconnectSocket();
   showAuthScreen();
   setAuthMode('login');
   toast('Logged out successfully', 'warning');
@@ -239,6 +241,7 @@ async function startDashboard() {
   initMap();
   renderCustomers();
   renderAnalytics();
+  initSocket();
 
   vehiclesRefreshInterval = window.setInterval(() => {
     refreshVehicles().catch((error) => console.error('Vehicle refresh failed:', error));
@@ -1049,42 +1052,296 @@ function deleteCustomer(id) {
 }
 
 // ─── ANALYTICS ───────────────────────────────────────────
-function renderAnalytics() {
-  // Weekly bar chart
-  const data = [32, 41, 29, 47, 38, 52, 47];
-  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const max = Math.max(...data);
-  const colours = ['var(--accent2)','var(--accent2)','var(--accent2)','var(--accent2)','var(--accent2)','var(--accent)','var(--accent)'];
-  
-  document.getElementById('weekly-chart').innerHTML = data.map((v,i) => `
-    <div class="bar-wrap">
-      <div class="bar-val">${v}</div>
-      <div class="bar" style="height:${Math.round((v/max)*100)}%;--bar-color:${colours[i]}"></div>
-      <div class="bar-label">${days[i]}</div>
-    </div>
-  `).join('');
 
-  // Activity log
-  const events = [
-    { time:'14:23', event:'Delivered to Arjun Sharma', driver:'Rahul D.', status:'delivered' },
-    { time:'13:51', event:'Route optimised — 3 vehicles', driver:'System', status:'transit' },
-    { time:'13:14', event:'Delivery failed — Deepak Kumar', driver:'Amit K.', status:'failed' },
-    { time:'12:40', event:'New delivery added DEL-007', driver:'Dispatcher', status:'pending' },
-    { time:'11:58', event:'Priya Mehta delivery started', driver:'Rahul D.', status:'transit' },
-    { time:'10:30', event:'Morning dispatch complete', driver:'System', status:'delivered' },
-  ];
+// Circumference of the donut ring (r=40, C = 2πr ≈ 251.2)
+const DONUT_CIRCUMFERENCE = 2 * Math.PI * 40;
 
-  const stCol = { delivered:'var(--accent)', transit:'var(--accent2)', pending:'var(--warning)', failed:'var(--danger)' };
-  document.getElementById('activity-log').innerHTML = events.map(e => `
+/**
+ * Render the KPI cards from /api/analytics/overview data.
+ * Gracefully falls back to "—" on missing values.
+ */
+function renderKPICards(overview) {
+  const deliveriesToday = overview?.deliveries?.total ?? '—';
+  const successRate = overview?.deliveries?.success_rate != null
+    ? `${overview.deliveries.success_rate}%`
+    : '—';
+  const totalDistance = overview?.total_distance_km != null
+    ? `${overview.total_distance_km} km`
+    : '—';
+  const activeFleet = overview?.vehicles?.active ?? '—';
+
+  const setEl = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+
+  setEl('kpi-deliveries-today', deliveriesToday);
+  setEl('kpi-ontime-rate', successRate);
+  setEl('kpi-total-distance', totalDistance);
+  setEl('kpi-active-fleet', activeFleet);
+
+  if (overview?.deliveries?.total != null) {
+    const sub = document.getElementById('kpi-deliveries-sub');
+    if (sub) sub.textContent = `${overview.deliveries.delivered || 0} delivered`;
+  }
+  if (overview?.vehicles?.total_vehicles != null) {
+    const sub = document.getElementById('kpi-fleet-sub');
+    if (sub) sub.textContent = `of ${overview.vehicles.total_vehicles} total`;
+  }
+}
+
+/**
+ * Render the Weekly Deliveries bar chart from /api/analytics/deliveries-by-day data.
+ * Expects an array of { date, total, delivered, failed }.
+ */
+function renderWeeklyChart(rows) {
+  const chart = document.getElementById('weekly-chart');
+  if (!chart) return;
+
+  if (!Array.isArray(rows) || !rows.length) {
+    chart.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:12px;">No delivery data available</div>';
+    return;
+  }
+
+  const max = Math.max(...rows.map((r) => r.total), 1);
+  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const colours = ['var(--accent2)', 'var(--accent2)', 'var(--accent2)', 'var(--accent2)', 'var(--accent2)', 'var(--accent)', 'var(--accent)'];
+
+  chart.innerHTML = rows.map((row) => {
+    const date = new Date(row.date);
+    const dayLabel = Number.isNaN(date.getTime()) ? row.date : dayLabels[date.getDay()];
+    const heightPct = Math.round((row.total / max) * 100);
+    const colourIdx = Number.isNaN(date.getTime()) ? 0 : date.getDay();
+    return `
+      <div class="bar-wrap">
+        <div class="bar-val">${row.total}</div>
+        <div class="bar" style="height:${heightPct}%;--bar-color:${colours[colourIdx % colours.length]}"></div>
+        <div class="bar-label">${dayLabel}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Render the Delivery Status Breakdown donut chart.
+ * Expects an array of { status, count }.
+ * Segment order: delivered → transit → pending → failed.
+ */
+function renderDonutChart(rows) {
+  if (!Array.isArray(rows)) return;
+
+  const statusMap = { delivered: 0, transit: 0, pending: 0, failed: 0 };
+  let total = 0;
+  rows.forEach((row) => {
+    const key = String(row.status || '').toLowerCase();
+    if (key in statusMap) statusMap[key] = row.count;
+    total += row.count;
+  });
+
+  if (total === 0) return;
+
+  // Update total label
+  const totalEl = document.getElementById('donut-total');
+  if (totalEl) totalEl.textContent = total;
+
+  // Compute arc lengths and offsets for each segment
+  const C = DONUT_CIRCUMFERENCE;
+  const order = ['delivered', 'transit', 'pending', 'failed'];
+  let cumulativeOffset = 0; // offset starts at 0 (12 o'clock = 0deg = no offset)
+
+  // SVG stroke-dashoffset starts at 3 o'clock by default; rotate -90° (offset = -C*0.25) not needed
+  // since we use cumulative offsets starting from the same reference point.
+  // Arc is drawn clockwise; we negate offset to start from the top (standard convention).
+  const START_OFFSET = -(C * 0.25); // rotate 90° counter-clockwise so first segment starts at top
+
+  order.forEach((status) => {
+    const circle = document.getElementById(`donut-${status}`);
+    if (!circle) return;
+
+    const pct = statusMap[status] / total;
+    const arc = pct * C;
+    const gap = C - arc;
+
+    circle.setAttribute('stroke-dasharray', `${arc.toFixed(2)} ${gap.toFixed(2)}`);
+    circle.setAttribute('stroke-dashoffset', (START_OFFSET - cumulativeOffset).toFixed(2));
+    cumulativeOffset += arc;
+
+    const legendEl = document.getElementById(`legend-${status}`);
+    if (legendEl) legendEl.textContent = Math.round(pct * 100);
+  });
+}
+
+/**
+ * Render a single activity log row and return its HTML string.
+ */
+function buildActivityRow(event) {
+  const stCol = {
+    NEW_DELIVERY: 'var(--accent)',
+    STATUS_CHANGE: 'var(--accent2)',
+    ROUTE_OPTIMIZED: 'var(--accent2)',
+    VEHICLE_UPDATED: 'var(--warning)',
+    SYSTEM: 'var(--text3)',
+  };
+
+  const statusLabels = {
+    NEW_DELIVERY: 'new',
+    STATUS_CHANGE: event.details?.status || 'updated',
+    ROUTE_OPTIMIZED: 'optimised',
+    VEHICLE_UPDATED: 'vehicle',
+    SYSTEM: 'system',
+  };
+
+  const ts = event.timestamp ? new Date(event.timestamp) : null;
+  const timeStr = ts && !Number.isNaN(ts.getTime())
+    ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '—';
+
+  const colour = stCol[event.eventType] || 'var(--text3)';
+  const label = statusLabels[event.eventType] || (event.eventType || 'event').toLowerCase();
+  const driver = event.driverId || event.details?.driverName || 'System';
+
+  return `
     <tr>
-      <td style="padding:9px 14px;font-family:var(--font-mono);font-size:11px;color:var(--text3);">${e.time}</td>
-      <td style="padding:9px 14px;font-size:13px;color:var(--text);">${e.event}</td>
-      <td style="padding:9px 14px;font-size:12px;color:var(--text2);">${e.driver}</td>
+      <td style="padding:9px 14px;font-family:var(--font-mono);font-size:11px;color:var(--text3);">${timeStr}</td>
+      <td style="padding:9px 14px;font-size:13px;color:var(--text);">${event.message || '—'}</td>
+      <td style="padding:9px 14px;font-size:12px;color:var(--text2);">${driver}</td>
       <td style="padding:9px 14px;">
-        <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:${stCol[e.status]}18;color:${stCol[e.status]};border:1px solid ${stCol[e.status]}33">${e.status}</span>
+        <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:${colour}18;color:${colour};border:1px solid ${colour}33">${label}</span>
       </td>
     </tr>
-  `).join('');
+  `;
+}
+
+/**
+ * Render the Activity Log from /api/analytics/events data.
+ */
+function renderActivityLog(events) {
+  const tbody = document.getElementById('activity-log');
+  if (!tbody) return;
+
+  if (!Array.isArray(events) || !events.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="padding:16px;color:var(--text3);text-align:center;">No recent activity</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = events.map(buildActivityRow).join('');
+}
+
+/**
+ * Prepend a single new event to the Activity Log, keeping only the latest 10 rows.
+ */
+function prependActivityRow(event) {
+  const tbody = document.getElementById('activity-log');
+  if (!tbody) return;
+
+  // Remove "no activity" placeholder if present
+  const placeholder = tbody.querySelector('td[colspan="4"]');
+  if (placeholder) tbody.innerHTML = '';
+
+  tbody.insertAdjacentHTML('afterbegin', buildActivityRow(event));
+
+  // Keep rolling window of 10
+  const rows = tbody.querySelectorAll('tr');
+  if (rows.length > 10) {
+    rows[rows.length - 1].remove();
+  }
+}
+
+/**
+ * Fetch all analytics data in parallel and render every section of the dashboard.
+ */
+async function renderAnalytics() {
+  try {
+    const [overviewRes, byDayRes, byStatusRes, eventsRes] = await Promise.all([
+      apiFetch('/api/analytics/overview'),
+      apiFetch('/api/analytics/deliveries-by-day'),
+      apiFetch('/api/analytics/deliveries-by-status'),
+      apiFetch('/api/analytics/events'),
+    ]);
+
+    // Handle 401 consistently
+    if ([overviewRes, byDayRes, byStatusRes, eventsRes].some((r) => r.status === 401)) {
+      requireSession();
+      return;
+    }
+
+    const [overview, byDay, byStatus, events] = await Promise.all([
+      overviewRes.ok ? overviewRes.json() : null,
+      byDayRes.ok ? byDayRes.json() : [],
+      byStatusRes.ok ? byStatusRes.json() : [],
+      eventsRes.ok ? eventsRes.json() : [],
+    ]);
+
+    if (overview) renderKPICards(overview);
+    renderWeeklyChart(byDay);
+    renderDonutChart(byStatus);
+    renderActivityLog(events);
+  } catch (error) {
+    console.error('Analytics render failed:', error);
+    toast('Analytics data could not be loaded', 'warning');
+  }
+}
+
+// ─── SOCKET.IO CLIENT ────────────────────────────────────
+
+/**
+ * Initialise the Socket.io connection and wire event handlers for real-time updates.
+ * Called once after the user authenticates.
+ */
+let socketClient = null;
+
+function initSocket() {
+  // Prevent duplicate connections
+  if (socketClient && socketClient.connected) return;
+
+  socketClient = window.io ? window.io() : null;
+  if (!socketClient) {
+    console.warn('Socket.io not available — real-time updates disabled');
+    return;
+  }
+
+  socketClient.on('connect', () => {
+    console.log('🔌 Socket connected:', socketClient.id);
+  });
+
+  socketClient.on('disconnect', () => {
+    console.warn('❌ Socket disconnected — will auto-reconnect');
+  });
+
+  // Delivery status mutations → refresh charts and KPI cards
+  socketClient.on('DELIVERY_UPDATED', () => {
+    renderAnalytics();
+  });
+
+  socketClient.on('delivery:statusChanged', () => {
+    renderAnalytics();
+  });
+
+  // Route optimised → refresh KPI cards (distance changes)
+  socketClient.on('ROUTE_OPTIMIZED', () => {
+    renderAnalytics();
+  });
+
+  // New audit event → prepend to Activity Log without a full re-fetch
+  socketClient.on('analytics:newEvent', (event) => {
+    prependActivityRow(event);
+    // Also bump the KPI cards to stay in sync
+    renderAnalytics();
+  });
+
+  // Live vehicle location updates (already handled by map layer)
+  socketClient.on('vehicle:locationUpdated', ({ id, lat, lng }) => {
+    if (markers[id]) {
+      markers[id].setLatLng([lat, lng]);
+    }
+  });
+}
+
+function disconnectSocket() {
+  if (socketClient) {
+    socketClient.disconnect();
+    socketClient = null;
+  }
 }
 
 // ─── VIEW SWITCHER ────────────────────────────────────────
