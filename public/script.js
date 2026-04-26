@@ -22,9 +22,9 @@ let customers = [
 ];
 
 let vehicles = [
-  { id:"V-01", name:"Van Alpha", icon:"🚐", driver:"Rahul D.", status:"active", stops:4 },
-  { id:"V-02", name:"Bike Beta", icon:"🛵", driver:"Amit K.", status:"busy", stops:2 },
-  { id:"V-03", name:"Van Gamma", icon:"🚐", driver:"Suresh P.", status:"idle", stops:0 },
+  { id:"V-01", name:"Van", icon:"🚐", driver:"Rahul D.", status:"active", stops:4 },
+  { id:"V-02", name:"Bike", icon:"🛵", driver:"Amit K.", status:"busy", stops:2 },
+  { id:"V-03", name:"Truck", icon:"🚐", driver:"Suresh P.", status:"idle", stops:0 },
 ];
 
 const TOKEN_STORAGE_KEY = 'routeflow.authToken';
