@@ -5,7 +5,7 @@ Complete Node.js + Express backend for the RouteFlow delivery management dashboa
 ## Tech Stack
 - **Runtime**: Node.js
 - **Framework**: Express.js
-- **Database**: SQLite via `better-sqlite3` (zero-config, file-based)
+- **Database**: MongoDB
 - **Real-time**: Socket.io (live vehicle tracking, delivery updates)
 - **Auth**: JWT + bcrypt
 
@@ -14,7 +14,7 @@ Complete Node.js + Express backend for the RouteFlow delivery management dashboa
 ## 🚀 Setup & Run
 
 ```bash
-cd routeflow-backend
+cd RouteFlow3
 npm install
 npm run dev       # Development with auto-reload
 npm start         # Production
