@@ -312,9 +312,9 @@ function normalizeCustomer(customer, index = 0) {
 
 function vehicleIcon(type = '') {
   const value = String(type).toLowerCase();
-  if (value.includes('bike')) return 'ðŸ›µ';
-  if (value.includes('truck')) return 'ðŸšš';
-  return 'ðŸš';
+  if (value.includes('bike')) return '🚴';
+  if (value.includes('truck')) return '🚚';
+  return '🚐';
 }
 
 function normalizeVehicle(vehicle, index = 0) {
@@ -1056,10 +1056,6 @@ function deleteCustomer(id) {
 // Circumference of the donut ring (r=40, C = 2πr ≈ 251.2)
 const DONUT_CIRCUMFERENCE = 2 * Math.PI * 40;
 
-/**
- * Render the KPI cards from /api/analytics/overview data.
- * Gracefully falls back to "—" on missing values.
- */
 function renderKPICards(overview) {
   const deliveriesToday = overview?.deliveries?.total ?? '—';
   const successRate = overview?.deliveries?.success_rate != null
@@ -1090,10 +1086,7 @@ function renderKPICards(overview) {
   }
 }
 
-/**
- * Render the Weekly Deliveries bar chart from /api/analytics/deliveries-by-day data.
- * Expects an array of { date, total, delivered, failed }.
- */
+
 function renderWeeklyChart(rows) {
   const chart = document.getElementById('weekly-chart');
   if (!chart) return;
@@ -1122,11 +1115,7 @@ function renderWeeklyChart(rows) {
   }).join('');
 }
 
-/**
- * Render the Delivery Status Breakdown donut chart.
- * Expects an array of { status, count }.
- * Segment order: delivered → transit → pending → failed.
- */
+
 function renderDonutChart(rows) {
   if (!Array.isArray(rows)) return;
 
